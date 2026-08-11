@@ -2,8 +2,6 @@ package the.spoofies.communicateAPI;
 
 import com.destroystokyo.paper.event.player.PlayerConnectionCloseEvent;
 import io.papermc.paper.connection.PlayerConfigurationConnection;
-import io.papermc.paper.connection.PlayerConnection;
-import io.papermc.paper.connection.PlayerGameConnection;
 import io.papermc.paper.event.connection.configuration.AsyncPlayerConnectionConfigureEvent;
 import net.kyori.adventure.text.Component;
 import org.bukkit.entity.Player;
@@ -33,11 +31,11 @@ public final class HandshakePayload implements Listener, PluginMessageListener {
     public static void register(Plugin plugin) {
         owningPlugin = plugin;
         HandshakePayload instance = new HandshakePayload();
-
         plugin.getServer().getMessenger().registerOutgoingPluginChannel(plugin, HANDSHAKE_CHANNEL);
+        // ADD THIS — register the incoming channel so replies from the client are received
+        plugin.getServer().getMessenger().registerIncomingPluginChannel(plugin, HANDSHAKE_CHANNEL, instance);
         plugin.getServer().getMessenger().registerIncomingPluginChannel(plugin, HANDSHAKE_CHANNEL, instance);
         plugin.getServer().getPluginManager().registerEvents(instance, plugin);
-
         plugin.getLogger().info("[Handshake] register() called, owningPlugin=" + plugin.getName());
     }
 
@@ -52,32 +50,21 @@ public final class HandshakePayload implements Listener, PluginMessageListener {
 
     @EventHandler
     void onConfigure(AsyncPlayerConnectionConfigureEvent event) {
-        owningPlugin.getLogger().info("[Handshake] onConfigure fired, clientRequired=" + clientRequired);
-
-        if (!clientRequired || owningPlugin == null) {
-            owningPlugin.getLogger().info("[Handshake] onConfigure returning early");
-            return;
-        }
+        if (!clientRequired || owningPlugin == null) return;
 
         PlayerConfigurationConnection connection = event.getConnection();
-        UUID uuid = connection.getProfile().getId();
-        owningPlugin.getLogger().info("[Handshake] uuid=" + uuid);
+        UUID uuid = connection.getProfile().getUniqueId();
         if (uuid == null) return;
 
         CompletableFuture<Boolean> response = new CompletableFuture<>();
         response.completeOnTimeout(false, timeoutSeconds, TimeUnit.SECONDS);
         awaitingResponse.put(uuid, response);
 
-        owningPlugin.getLogger().info("[Handshake] sending probe during configuration");
-        try {
-            connection.sendPluginMessage(owningPlugin, HANDSHAKE_CHANNEL, new byte[]{0});
-            owningPlugin.getLogger().info("[Handshake] probe sent successfully");
-        } catch (Exception e) {
-            owningPlugin.getLogger().warning("[Handshake] FAILED to send probe: " + e);
-        }
+        // send the probe on our custom channel during configuration
+        connection.sendPluginMessage(owningPlugin, HANDSHAKE_CHANNEL, new byte[]{0});
 
+        // block here until the client answers or we time out
         boolean verified = response.join();
-        owningPlugin.getLogger().info("[Handshake] verified=" + verified);
 
         if (!verified) {
             connection.disconnect(Component.text(
@@ -93,37 +80,24 @@ public final class HandshakePayload implements Listener, PluginMessageListener {
         awaitingResponse.remove(event.getPlayerUniqueId());
     }
 
-    @Override
-    public void onPluginMessageReceived(String channel, Player player, byte[] message) {
-        if (HANDSHAKE_CHANNEL.equals(channel)) {
-            complete(player.getUniqueId());
-        }
-    }
-
-    @Override
-    public void onPluginMessageReceived(String channel, PlayerConnection connection, byte[] message) {
-        if (!HANDSHAKE_CHANNEL.equals(channel)) return;
-
-        UUID uuid = resolveUuid(connection);
-        if (uuid != null) {
-            complete(uuid);
-        }
-    }
-
-    private UUID resolveUuid(PlayerConnection connection) {
-        if (connection instanceof PlayerConfigurationConnection configConnection) {
-            return configConnection.getProfile().getId();
-        }
-        if (connection instanceof PlayerGameConnection gameConnection) {
-            return gameConnection.getPlayer().getUniqueId();
-        }
-        return null;
-    }
-
-    private void complete(UUID uuid) {
+    // called from wherever your configuration-phase plugin message listener
+    // receives the client's reply on HANDSHAKE_CHANNEL
+    void markVerified(UUID uuid) {
         CompletableFuture<Boolean> future = awaitingResponse.get(uuid);
         if (future != null) {
             future.complete(true);
+        }
+    }
+
+    @Override
+    public void onPluginMessageReceived(String channel, Player player, byte[] message) {
+        if (!HANDSHAKE_CHANNEL.equals(channel)) {
+            return;
+        }
+
+        UUID uuid = player.getUniqueId();
+        if (uuid != null) {
+            markVerified(uuid);
         }
     }
 }
