@@ -1,12 +1,13 @@
 # CommunicateAPI
 
-Send arbitrary-length data packets from a Paper server to a specific client,
-disguised as a chat message. Pairs with a client-side mixin (Fabric) that
-intercepts and cancels messages matching your chosen prefix before they
-render, then parses and dispatches the payload.
+Send arbitrary-length data packets from a Paper server to a specific client
+over a dedicated plugin messaging channel. Pairs with a client-side Fabric
+mod that registers a matching `ClientPlayNetworking` receiver for that
+channel, then parses and dispatches the payload.
 
-Each consumer picks their own prefix, so multiple plugins can use this
-system on the same server without colliding.
+Each consumer picks their own prefix, which becomes the channel name
+(`<prefix>:data`), so multiple plugins can use this system on the same
+server without colliding.
 
 ## Installation
 
@@ -22,10 +23,11 @@ Add the JitPack repository and the dependency to your `pom.xml`:
 
 <dependencies>
     <dependency>
-            <groupId>com.github.TheSpoofies</groupId>
-            <artifactId>CommunicateAPI</artifactId>
-            <version>1.0.0</version>
-        </dependency>
+        <groupId>com.github.TheSpoofies</groupId>
+        <artifactId>CommunicateAPI</artifactId>
+        <version>v1.0.0</version>
+        <scope>provided</scope>
+    </dependency>
 </dependencies>
 ```
 
@@ -48,7 +50,9 @@ build classpath.
 ```java
 import the.spoofies.communicateAPI.ChatDataMessenger;
 
-ChatDataMessenger messenger = ChatDataMessenger.create("myplugin");
+// pass your own JavaPlugin instance — the messenger registers its
+// outgoing channel under your plugin, not CommunicateAPI's
+ChatDataMessenger messenger = ChatDataMessenger.create(this, "myplugin");
 
 // simple form, as many fields as you want
 messenger.send(player, /* type */ 1, abilityId, cooldownTicks, maxCooldownTicks);
@@ -65,29 +69,32 @@ The `type` argument is an `int` you define the meaning of yourself — the
 messenger doesn't interpret it, so keep your own type-ID constants in your
 plugin and share them with whatever parses the data on the client.
 
+### Prefix rules
+
+Your prefix becomes half of a Minecraft channel identifier
+(`<prefix>:data`), so it must be lowercase letters, digits, `-`, or `_`
+only. `create()` throws `IllegalArgumentException` immediately if the
+prefix doesn't match, rather than failing later when the channel is used.
+
 ### Wire format
 
-```
-<prefix>_<type>_<field0>_<field1>_..._<fieldN>
-```
-
-If your data might contain `_`, use a custom delimiter instead:
-
-```java
-ChatDataMessenger messenger = ChatDataMessenger.create("myplugin", ":");
-```
-
-`send()` throws `IllegalArgumentException` if any field's string value
-contains the delimiter, so a mismatch is caught immediately rather than
-silently corrupting the packet.
+Each packet is written as: a varint packet type, a varint field count,
+then each field encoded as a length-prefixed UTF-8 string. Fields are sent
+as their `String.valueOf(...)` form regardless of original type, so parse
+them back into the type you expect on the client.
 
 ## Client side
 
-This repo only covers the server-side sending half. On the client, a Fabric
-mixin needs to intercept incoming system chat packets, check for your
-prefix, cancel the packet, and route the rest of the string to your own
-parser/handler. See the project's mod repo for the matching mixin and
-packet-type registry.
+This repo only covers the server-side sending half. On the client, a
+Fabric mod needs to:
+1. Register a `CustomPacketPayload` matching this wire format
+2. Register it via `PayloadTypeRegistry.clientboundPlay()` in its common
+   `ModInitializer`
+3. Handle it with `ClientPlayNetworking.registerGlobalReceiver` for the
+   `<prefix>:data` channel
+
+See the project's mod repo for the matching payload/codec and receiver
+setup.
 
 More coming soon...
 
