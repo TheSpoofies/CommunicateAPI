@@ -52,19 +52,32 @@ public final class HandshakePayload implements Listener, PluginMessageListener {
 
     @EventHandler
     void onConfigure(AsyncPlayerConnectionConfigureEvent event) {
-        if (!clientRequired || owningPlugin == null) return;
+        owningPlugin.getLogger().info("[Handshake] onConfigure fired, clientRequired=" + clientRequired);
+
+        if (!clientRequired || owningPlugin == null) {
+            owningPlugin.getLogger().info("[Handshake] onConfigure returning early");
+            return;
+        }
 
         PlayerConfigurationConnection connection = event.getConnection();
         UUID uuid = connection.getProfile().getId();
+        owningPlugin.getLogger().info("[Handshake] uuid=" + uuid);
         if (uuid == null) return;
 
         CompletableFuture<Boolean> response = new CompletableFuture<>();
         response.completeOnTimeout(false, timeoutSeconds, TimeUnit.SECONDS);
         awaitingResponse.put(uuid, response);
 
-        connection.sendPluginMessage(owningPlugin, HANDSHAKE_CHANNEL, new byte[]{0});
+        owningPlugin.getLogger().info("[Handshake] sending probe during configuration");
+        try {
+            connection.sendPluginMessage(owningPlugin, HANDSHAKE_CHANNEL, new byte[]{0});
+            owningPlugin.getLogger().info("[Handshake] probe sent successfully");
+        } catch (Exception e) {
+            owningPlugin.getLogger().warning("[Handshake] FAILED to send probe: " + e);
+        }
 
         boolean verified = response.join();
+        owningPlugin.getLogger().info("[Handshake] verified=" + verified);
 
         if (!verified) {
             connection.disconnect(Component.text(
