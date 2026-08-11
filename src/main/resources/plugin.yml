@@ -1,0 +1,5 @@
+name: CommunicateAPI
+version: '1.0'
+main: the.spoofies.communicateAPI.CommunicateAPI
+api-version: '1.21'
+author: TheSpoofies
