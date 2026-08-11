@@ -29,6 +29,7 @@ public final class HandshakePayload implements Listener {
     public static void register(Plugin plugin) {
         owningPlugin = plugin;
         HandshakePayload instance = new HandshakePayload();
+        plugin.getServer().getMessenger().registerOutgoingPluginChannel(plugin, HANDSHAKE_CHANNEL);
         plugin.getServer().getPluginManager().registerEvents(instance, plugin);
         plugin.getLogger().info("[Handshake] register() called, owningPlugin=" + plugin.getName());
     }
