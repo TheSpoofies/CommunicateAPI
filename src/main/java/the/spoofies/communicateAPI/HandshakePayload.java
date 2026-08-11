@@ -2,11 +2,15 @@ package the.spoofies.communicateAPI;
 
 import com.destroystokyo.paper.event.player.PlayerConnectionCloseEvent;
 import io.papermc.paper.connection.PlayerConfigurationConnection;
+import io.papermc.paper.connection.PlayerConnection;
+import io.papermc.paper.connection.PlayerGameConnection;
 import io.papermc.paper.event.connection.configuration.AsyncPlayerConnectionConfigureEvent;
 import net.kyori.adventure.text.Component;
+import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.plugin.Plugin;
+import org.bukkit.plugin.messaging.PluginMessageListener;
 
 import java.util.Map;
 import java.util.UUID;
@@ -14,7 +18,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
-public final class HandshakePayload implements Listener {
+public final class HandshakePayload implements Listener, PluginMessageListener {
 
     private static final String HANDSHAKE_CHANNEL = "communicateapi:handshake";
 
@@ -29,8 +33,11 @@ public final class HandshakePayload implements Listener {
     public static void register(Plugin plugin) {
         owningPlugin = plugin;
         HandshakePayload instance = new HandshakePayload();
+
         plugin.getServer().getMessenger().registerOutgoingPluginChannel(plugin, HANDSHAKE_CHANNEL);
+        plugin.getServer().getMessenger().registerIncomingPluginChannel(plugin, HANDSHAKE_CHANNEL, instance);
         plugin.getServer().getPluginManager().registerEvents(instance, plugin);
+
         plugin.getLogger().info("[Handshake] register() called, owningPlugin=" + plugin.getName());
     }
 
@@ -55,10 +62,8 @@ public final class HandshakePayload implements Listener {
         response.completeOnTimeout(false, timeoutSeconds, TimeUnit.SECONDS);
         awaitingResponse.put(uuid, response);
 
-        // send the probe on our custom channel during configuration
         connection.sendPluginMessage(owningPlugin, HANDSHAKE_CHANNEL, new byte[]{0});
 
-        // block here until the client answers or we time out
         boolean verified = response.join();
 
         if (!verified) {
@@ -75,9 +80,34 @@ public final class HandshakePayload implements Listener {
         awaitingResponse.remove(event.getPlayerUniqueId());
     }
 
-    // called from wherever your configuration-phase plugin message listener
-    // receives the client's reply on HANDSHAKE_CHANNEL
-    void markVerified(UUID uuid) {
+    @Override
+    public void onPluginMessageReceived(String channel, Player player, byte[] message) {
+        if (HANDSHAKE_CHANNEL.equals(channel)) {
+            complete(player.getUniqueId());
+        }
+    }
+
+    @Override
+    public void onPluginMessageReceived(String channel, PlayerConnection connection, byte[] message) {
+        if (!HANDSHAKE_CHANNEL.equals(channel)) return;
+
+        UUID uuid = resolveUuid(connection);
+        if (uuid != null) {
+            complete(uuid);
+        }
+    }
+
+    private UUID resolveUuid(PlayerConnection connection) {
+        if (connection instanceof PlayerConfigurationConnection configConnection) {
+            return configConnection.getProfile().getId();
+        }
+        if (connection instanceof PlayerGameConnection gameConnection) {
+            return gameConnection.getPlayer().getUniqueId();
+        }
+        return null;
+    }
+
+    private void complete(UUID uuid) {
         CompletableFuture<Boolean> future = awaitingResponse.get(uuid);
         if (future != null) {
             future.complete(true);
