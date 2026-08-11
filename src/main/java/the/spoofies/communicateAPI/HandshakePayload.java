@@ -62,9 +62,19 @@ public final class HandshakePayload implements Listener, PluginMessageListener {
         Player player = event.getPlayer();
         VERIFIED.remove(player.getUniqueId());
 
-        log("[Handshake] sending probe to " + player.getName() + " on channel " + HANDSHAKE_CHANNEL);
-        player.sendPluginMessage(owningPlugin, HANDSHAKE_CHANNEL, new byte[]{0});
-        log("[Handshake] probe sent, scheduling kick check in " + timeoutTicks + " ticks");
+        // delay the probe — sending synchronously in onJoin can race the client's
+        // channel registration and get silently dropped
+        owningPlugin.getServer().getScheduler().runTaskLater(owningPlugin, () -> {
+            if (!player.isOnline()) return;
+
+            log("[Handshake] sending probe to " + player.getName() + " on channel " + HANDSHAKE_CHANNEL);
+            try {
+                player.sendPluginMessage(owningPlugin, HANDSHAKE_CHANNEL, new byte[]{0});
+                log("[Handshake] probe send() returned without exception");
+            } catch (Exception e) {
+                log("[Handshake] FAILED to send probe: " + e);
+            }
+        }, 20L); // 1 second delay to be safe — you can tune this down later
 
         owningPlugin.getServer().getScheduler().runTaskLater(owningPlugin, () -> {
             log("[Handshake] kick check running for " + player.getName()
@@ -78,7 +88,7 @@ public final class HandshakePayload implements Listener, PluginMessageListener {
                         "This server requires a CommunicateAPI-compatible client mod to join."
                 ));
             }
-        }, timeoutTicks);
+        }, timeoutTicks + 20L); // push the kick check back by the same delay
     }
 
     @EventHandler
