@@ -6,8 +6,9 @@ public final class CommunicateAPI extends JavaPlugin {
 
     @Override
     public void onEnable() {
-        getLogger().info("CommunicateAPI v" + getPluginMeta().getVersion() + " enabled.");
+        HandshakePayload.register(this);
 
+        getLogger().info("CommunicateAPI v" + getPluginMeta().getVersion() + " enabled.");
     }
 
     @Override

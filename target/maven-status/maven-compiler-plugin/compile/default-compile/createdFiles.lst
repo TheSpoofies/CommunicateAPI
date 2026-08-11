@@ -1,4 +1,5 @@
 the\spoofies\communicateAPI\ChatDataMessenger$Packet.class
 the\spoofies\communicateAPI\ChatDataMessenger.class
+the\spoofies\communicateAPI\PacketReader.class
 the\spoofies\communicateAPI\PacketWriter.class
 the\spoofies\communicateAPI\CommunicateAPI.class
