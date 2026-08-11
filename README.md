@@ -24,7 +24,7 @@ Add the JitPack repository and the dependency to your `pom.xml`:
     <dependency>
             <groupId>com.github.TheSpoofies</groupId>
             <artifactId>CommunicateAPI</artifactId>
-            <version>1.0.0</version>
+            <version>v1.0.0</version>
         </dependency>
 </dependencies>
 ```
