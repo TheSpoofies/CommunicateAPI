@@ -22,11 +22,10 @@ Add the JitPack repository and the dependency to your `pom.xml`:
 
 <dependencies>
     <dependency>
-        <groupId>com.github.YOUR_USERNAME</groupId>
-        <artifactId>CommunicateAPI</artifactId>
-        <version>v1.0.0</version>
-        <scope>provided</scope>
-    </dependency>
+            <groupId>com.github.TheSpoofies</groupId>
+            <artifactId>CommunicateAPI</artifactId>
+            <version>1.0.0</version>
+        </dependency>
 </dependencies>
 ```
 
